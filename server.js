@@ -6,13 +6,17 @@ require("dotenv").config();
 
 const app = express();
 
+// Multer setup
 const storage = multer.memoryStorage();
 
 const upload = multer({
   storage,
-  limits: { fileSize: 2 * 1024 * 1024 },
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
   fileFilter: (req, file, cb) => {
-    if (file.mimetype === "image/jpeg" || file.mimetype === "image/png") {
+    if (
+      file.mimetype === "image/jpeg" ||
+      file.mimetype === "image/png"
+    ) {
       cb(null, true);
     } else {
       cb(new Error("Only JPG/PNG allowed"), false);
@@ -20,17 +24,17 @@ const upload = multer({
   },
 });
 
+// AWS S3 config
 const s3 = new AWS.S3({
   accessKeyId: process.env.AWS_ACCESS_KEY,
   secretAccessKey: process.env.AWS_SECRET_KEY,
   region: process.env.AWS_REGION,
 });
 
+// Upload route
 app.post("/upload", upload.single("image"), async (req, res) => {
   try {
-    const file = req.file;
-
-    if (!file) {
+    if (!req.file) {
       return res.status(400).json({ error: "No file uploaded" });
     }
 
@@ -39,8 +43,8 @@ app.post("/upload", upload.single("image"), async (req, res) => {
     const params = {
       Bucket: process.env.S3_BUCKET,
       Key: fileName,
-      Body: file.buffer,
-      ContentType: file.mimetype,
+      Body: req.file.buffer,
+      ContentType: req.file.mimetype,
     };
 
     await s3.upload(params).promise();
