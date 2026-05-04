@@ -17,11 +17,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 
 app = FastAPI(title="Scalable Image Upload Server", version="1.0.0")
 app.state.settings = load_settings()
-app.state.s3_client = boto3.client(
-    "s3",
-    region_name=app.state.settings.aws_region,
-    endpoint_url=app.state.settings.s3_endpoint_url,
-)
+app.state.s3_client = None
 
 
 def build_object_key(file_extension: str) -> str:
@@ -53,6 +49,21 @@ def build_s3_url(bucket_name: str, object_key: str) -> str:
     return f"https://{bucket_name}.s3.amazonaws.com/{object_key}"
 
 
+def create_s3_client(settings: Settings):
+    return boto3.client(
+        "s3",
+        region_name=settings.aws_region,
+        endpoint_url=settings.s3_endpoint_url,
+    )
+
+
+def get_s3_client():
+    if app.state.s3_client is None:
+        settings: Settings = app.state.settings
+        app.state.s3_client = create_s3_client(settings)
+    return app.state.s3_client
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     settings: Settings = app.state.settings
@@ -79,7 +90,7 @@ async def upload_image(file: UploadFile = File(...)) -> dict[str, str]:
 
     settings: Settings = app.state.settings
     try:
-        app.state.s3_client.upload_fileobj(
+        get_s3_client().upload_fileobj(
             io.BytesIO(payload),
             settings.s3_bucket_name,
             object_key,
@@ -95,4 +106,3 @@ async def upload_image(file: UploadFile = File(...)) -> dict[str, str]:
     image_url = build_s3_url(settings.s3_bucket_name, object_key)
     logger.info("Uploaded %s via %s", object_key, settings.instance_id)
     return {"url": image_url}
-
